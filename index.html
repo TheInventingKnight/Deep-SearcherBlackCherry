@@ -193,7 +193,7 @@
                         <i data-lucide="layout-grid" class="w-5 h-5 text-accent"></i> In-App Explorer
                     </h2>
                     <span class="text-xs text-slate-500 flex items-center gap-1">
-                        <i data-lucide="shield-alert" class="w-3 h-3"></i> Swarm API mode active
+                        <i data-lucide="shield-check" class="w-3 h-3 text-green-500"></i> Smart Fallback System
                     </span>
                 </div>
 
@@ -209,7 +209,8 @@
                 <!-- Loading State (Hidden by default) -->
                 <div id="loading-state" class="hidden flex-col items-center justify-center py-20">
                     <span class="loader w-12 h-12 mb-4"></span>
-                    <p class="text-primary font-mono animate-pulse" id="loading-text">Swarm connecting to nodes...</p>
+                    <p class="text-primary font-mono animate-pulse" id="loading-text">Connecting to nodes...</p>
+                    <p class="text-xs text-slate-500 font-mono mt-2" id="loading-detail">Initializing request...</p>
                 </div>
             </div>
 
@@ -219,18 +220,22 @@
     <script>
         lucide.createIcons();
 
-        // Fresher and broader list of instances
-        const BASE_API_NODES = [
-            { url: 'https://pipedapi.kavin.rocks', type: 'piped' },
-            { url: 'https://api.piped.projectsegfau.lt', type: 'piped' },
-            { url: 'https://pipedapi.smnz.de', type: 'piped' },
-            { url: 'https://pipedapi.drgns.space', type: 'piped' },
-            { url: 'https://vid.puffyan.us', type: 'invidious' },
-            { url: 'https://invidious.protokolla.fi', type: 'invidious' },
-            { url: 'https://iv.ggtyler.dev', type: 'invidious' },
-            { url: 'https://invidious.vpscore.com', type: 'invidious' },
-            { url: 'https://invidious.privacyredirect.com', type: 'invidious' },
-            { url: 'https://inv.tux.pizza', type: 'invidious' }
+        // High reliability multi-backend endpoints
+        const API_NODES = [
+            // Piped APIs (Best structure, but strict CORS)
+            { type: 'piped', url: 'https://pipedapi.kavin.rocks' },
+            { type: 'piped', url: 'https://pipedapi.tokhmi.xyz' },
+            { type: 'piped', url: 'https://piped-api.garudalinux.org' },
+            
+            // SearXNG APIs (Bypasses Cloudflare natively on their end, highly reliable)
+            { type: 'searxng', url: 'https://searx.be' },
+            { type: 'searxng', url: 'https://searx.tiekoetter.com' },
+            { type: 'searxng', url: 'https://search.mdosch.de' },
+            { type: 'searxng', url: 'https://searx.roflcopter.fr' },
+
+            // Invidious APIs (Good as absolute fallbacks)
+            { type: 'invidious', url: 'https://inv.tux.pizza' },
+            { type: 'invidious', url: 'https://invidious.nerdvpn.de' }
         ];
 
         // UI Elements
@@ -238,6 +243,7 @@
         const resultsContainer = document.getElementById('results-container');
         const loadingState = document.getElementById('loading-state');
         const loadingText = document.getElementById('loading-text');
+        const loadingDetail = document.getElementById('loading-detail');
         const ytdlpCode = document.getElementById('ytdlp-code');
         const ytDirectLink = document.getElementById('yt-direct-link');
         const ytUrlDisplay = document.getElementById('yt-url-display');
@@ -349,124 +355,174 @@
             ytDirectLink.classList.remove('pointer-events-none', 'opacity-50');
             ytUrlDisplay.value = ytUrl;
 
-            fetchInAppResults(fullQuery);
+            fetchInAppResultsSequentially(fullQuery);
         });
 
-        // Race fetching logic: Attempts multiple methods for a single node
-        async function fetchFromNode(node, query, proxies) {
-            let url = '';
-            if (node.type === 'piped') {
-                url = `${node.url}/search?q=${encodeURIComponent(query)}&filter=videos`;
-            } else if (node.type === 'invidious') {
-                url = `${node.url}/api/v1/search?q=${encodeURIComponent(query)}&type=video`;
+        // Safe timeout wrapper for fetch
+        async function fetchWithTimeout(url, options = {}, timeout = 6000) {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeout);
+            try {
+                const response = await fetch(url, { ...options, signal: controller.signal });
+                clearTimeout(id);
+                return response;
+            } catch (error) {
+                clearTimeout(id);
+                throw error;
             }
-
-            for (const proxy of proxies) {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s per try
-                
-                try {
-                    const response = await fetch(proxy.fn(url), { signal: controller.signal });
-                    clearTimeout(timeoutId);
-                    
-                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                    
-                    const text = await proxy.extract(response);
-                    
-                    // Reject Cloudflare blocks immediately
-                    if (!text || text.trim().startsWith('<')) {
-                        throw new Error("Received HTML");
-                    }
-                    
-                    const json = JSON.parse(text);
-                    if (json.error) throw new Error(`API Error: ${json.error}`);
-
-                    if (node.type === 'piped' && json.items) {
-                        return {
-                            node: new URL(node.url).hostname,
-                            data: json.items.filter(i => i.type === 'stream').map(i => ({
-                                videoId: i.url.replace('/watch?v=', ''),
-                                title: i.title,
-                                author: i.uploaderName,
-                                viewCount: i.views || 0,
-                                publishedText: i.uploadedDate || 'Unknown date',
-                                lengthSeconds: i.duration || 0,
-                                thumbUrl: i.thumbnail
-                            }))
-                        };
-                    } else if (node.type === 'invidious' && Array.isArray(json)) {
-                        return {
-                            node: new URL(node.url).hostname,
-                            data: json.filter(i => i.type === 'video').map(i => ({
-                                videoId: i.videoId,
-                                title: i.title,
-                                author: i.author,
-                                viewCount: i.viewCount || 0,
-                                publishedText: i.publishedText || 'Unknown date',
-                                lengthSeconds: i.lengthSeconds || 0,
-                                thumbUrl: i.videoThumbnails ? (i.videoThumbnails.find(t => t.quality === 'medium')?.url || i.videoThumbnails[0]?.url) : ''
-                            }))
-                        };
-                    }
-                    throw new Error("Malformed JSON");
-                } catch (err) {
-                    clearTimeout(timeoutId);
-                    // Automatically loops to next proxy method if this one failed
-                }
-            }
-            throw new Error(`All methods failed for ${node.url}`);
         }
 
-        async function fetchInAppResults(query) {
+        // Extremely robust JSON fetcher that tries 3 different bypass techniques per node
+        async function safeFetchJSON(url) {
+            // 1. Direct Try
+            try {
+                loadingDetail.innerText = "Attempting Direct Connection...";
+                const res = await fetchWithTimeout(url, {}, 5000);
+                if (res.ok) {
+                    const text = await res.text();
+                    if (!text.trim().startsWith('<')) return JSON.parse(text); // Block Cloudflare HTML
+                }
+            } catch(e) { console.log(`Direct failed: ${e.message}`); }
+
+            // 2. AllOrigins Wrapper (Using /get ensures we don't trigger browser CORS errors even if target is dead)
+            try {
+                loadingDetail.innerText = "Attempting AllOrigins /get Proxy...";
+                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+                const res = await fetchWithTimeout(proxyUrl, {}, 6000);
+                if (res.ok) {
+                    const proxyData = await res.json();
+                    if (proxyData.contents) {
+                        const text = proxyData.contents.trim();
+                        if (!text.startsWith('<')) { // Double check we didn't proxy a Cloudflare block page
+                            const parsed = JSON.parse(text);
+                            if (!parsed.error) return parsed;
+                        }
+                    }
+                }
+            } catch(e) { console.log(`AllOrigins proxy failed: ${e.message}`); }
+
+            // 3. CodeTabs Proxy Bypass
+            try {
+                loadingDetail.innerText = "Attempting CodeTabs Proxy...";
+                const proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
+                const res = await fetchWithTimeout(proxyUrl, {}, 6000);
+                if (res.ok) {
+                    const text = await res.text();
+                    if (!text.trim().startsWith('<')) return JSON.parse(text);
+                }
+            } catch(e) { console.log(`CodeTabs proxy failed: ${e.message}`); }
+
+            throw new Error("All fetching techniques exhausted for this URL.");
+        }
+
+        // Sequential runner so it doesn't instantly die on network bursts
+        async function fetchInAppResultsSequentially(query) {
             resultsContainer.innerHTML = '';
             resultsContainer.classList.add('hidden');
             loadingState.classList.remove('hidden');
             loadingState.classList.add('flex');
-            apiStatus.innerText = "Connecting...";
-            apiStatus.className = "text-yellow-500";
+            
+            const shuffledNodes = shuffleArray(API_NODES);
 
-            // Robust proxy array specifically designed to handle JSON returns to beat CORS blocks
-            const proxies = [
-                { name: 'Direct', fn: (u) => u, extract: async (r) => await r.text() },
-                { name: 'AllOrigins-Get', fn: (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`, extract: async (r) => { const j = await r.json(); return j.contents; } },
-                { name: 'CodeTabs', fn: (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`, extract: async (r) => await r.text() }
-            ];
+            for (const node of shuffledNodes) {
+                loadingText.innerText = `Connecting to ${new URL(node.url).hostname}...`;
+                apiStatus.innerText = `Trying ${new URL(node.url).hostname}...`;
+                apiStatus.className = "text-yellow-500";
+                
+                try {
+                    let results = [];
+                    
+                    if (node.type === 'piped') {
+                        const url = `${node.url}/search?q=${encodeURIComponent(query)}&filter=videos`;
+                        const data = await safeFetchJSON(url);
+                        if (data && data.items) {
+                            results = data.items.filter(i => i.type === 'stream').map(i => ({
+                                videoId: i.url.replace('/watch?v=', ''),
+                                title: i.title,
+                                author: i.uploaderName,
+                                viewCount: i.views,
+                                publishedText: i.uploadedDate,
+                                lengthSeconds: i.duration,
+                                thumbUrl: i.thumbnail
+                            }));
+                        }
+                    } 
+                    else if (node.type === 'searxng') {
+                        // SearXNG is incredibly stable for this
+                        const url = `${node.url}/search?q=${encodeURIComponent(query)}&engines=youtube&format=json`;
+                        const data = await safeFetchJSON(url);
+                        if (data && data.results) {
+                            results = data.results.map(i => {
+                                let vId = '';
+                                try { vId = new URL(i.url).searchParams.get('v'); } catch(e){}
+                                if (!vId) {
+                                    const match = i.url.match(/v=([^&]+)/);
+                                    if (match) vId = match[1];
+                                }
+                                let thumb = i.thumbnail;
+                                if (thumb && thumb.startsWith('//')) thumb = 'https:' + thumb;
+                                
+                                return {
+                                    videoId: vId,
+                                    title: i.title,
+                                    author: i.author || 'YouTube Channel',
+                                    viewCount: null, // SearXNG doesn't strictly provide view count natively
+                                    publishedText: i.publishedDate ? new Date(i.publishedDate).toLocaleDateString() : 'Unknown date',
+                                    lengthSeconds: null,
+                                    thumbUrl: thumb || (vId ? `https://i.ytimg.com/vi/${vId}/hqdefault.jpg` : '')
+                                };
+                            }).filter(i => i.videoId);
+                        }
+                    }
+                    else if (node.type === 'invidious') {
+                        const url = `${node.url}/api/v1/search?q=${encodeURIComponent(query)}&type=video`;
+                        const data = await safeFetchJSON(url);
+                        if (Array.isArray(data)) {
+                            results = data.filter(i => i.type === 'video').map(i => ({
+                                videoId: i.videoId,
+                                title: i.title,
+                                author: i.author,
+                                viewCount: i.viewCount,
+                                publishedText: i.publishedText,
+                                lengthSeconds: i.lengthSeconds,
+                                thumbUrl: i.videoThumbnails ? (i.videoThumbnails.find(t => t.quality === 'medium')?.url || i.videoThumbnails[0]?.url) : ''
+                            }));
+                        }
+                    }
 
-            // Grab up to 6 random instances to race against each other simultaneously
-            const activeNodes = shuffleArray(BASE_API_NODES).slice(0, 6);
-            loadingText.innerText = `Swarm racing ${activeNodes.length} nodes...`;
-
-            try {
-                // Promise.any instantly resolves the moment the FASTEST instance succeeds
-                const winningResult = await Promise.any(activeNodes.map(node => fetchFromNode(node, query, proxies)));
-                
-                loadingState.classList.add('hidden');
-                loadingState.classList.remove('flex');
-                resultsContainer.classList.remove('hidden');
-                
-                apiStatus.innerText = `Connected (${winningResult.node})`;
-                apiStatus.className = "text-green-500";
-                
-                renderCards(winningResult.data);
-                
-            } catch (aggregateError) {
-                // If every single node failed across every single proxy method
-                loadingState.classList.add('hidden');
-                loadingState.classList.remove('flex');
-                resultsContainer.classList.remove('hidden');
-                
-                apiStatus.innerText = "API Offline";
-                apiStatus.className = "text-red-500";
-                resultsContainer.innerHTML = `
-                    <div class="col-span-full flex flex-col items-center justify-center text-red-400 h-full py-10 bg-red-900/10 rounded-lg border border-red-900/50">
-                        <i data-lucide="server-crash" class="w-12 h-12 mb-3 text-red-500"></i>
-                        <h3 class="font-bold text-lg text-red-500">Public APIs Blocked</h3>
-                        <p class="text-sm mt-2 text-center max-w-md">Aggressive Cloudflare protections prevented in-app loading from the entire proxy swarm.</p>
-                        <p class="text-sm mt-4 text-center">Don't worry! Your deep search parameters are correct. Use the <strong>Direct YouTube Link</strong> or the <strong>yt-dlp command</strong> above.</p>
-                    </div>
-                `;
-                lucide.createIcons();
+                    // If we successfully mapped data, WE WON! Break the loop and render.
+                    if (results && results.length > 0) {
+                        apiStatus.innerText = `Connected (${new URL(node.url).hostname})`;
+                        apiStatus.className = "text-green-500";
+                        loadingState.classList.add('hidden');
+                        loadingState.classList.remove('flex');
+                        resultsContainer.classList.remove('hidden');
+                        
+                        renderCards(results);
+                        return; // Exit the entire function
+                    }
+                } catch (err) {
+                    console.log(`Failed connecting to node ${node.url}. Skipping to next...`);
+                    // It will seamlessly loop and try the next node.
+                }
             }
+
+            // If we make it all the way down here, EVERY node and proxy failed.
+            loadingState.classList.add('hidden');
+            loadingState.classList.remove('flex');
+            resultsContainer.classList.remove('hidden');
+            
+            apiStatus.innerText = "API Offline";
+            apiStatus.className = "text-red-500";
+            resultsContainer.innerHTML = `
+                <div class="col-span-full flex flex-col items-center justify-center text-red-400 h-full py-10 bg-red-900/10 rounded-lg border border-red-900/50">
+                    <i data-lucide="server-crash" class="w-12 h-12 mb-3 text-red-500"></i>
+                    <h3 class="font-bold text-lg text-red-500">Public APIs Blocked</h3>
+                    <p class="text-sm mt-2 text-center max-w-md">Aggressive Cloudflare protections prevented in-app loading from our entire node list.</p>
+                    <p class="text-sm mt-4 text-center">Don't worry! Your deep search parameters are correct. Use the <strong>Direct YouTube Link</strong> or the <strong>yt-dlp command</strong> above.</p>
+                </div>
+            `;
+            lucide.createIcons();
         }
 
         function renderCards(unifiedData) {
@@ -486,10 +542,15 @@
                 const card = document.createElement('div');
                 card.className = 'bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden hover:border-primary/50 transition flex flex-col group';
                 
-                const durationRaw = parseInt(video.lengthSeconds) || 0;
-                const minutes = Math.floor(durationRaw / 60);
-                const seconds = durationRaw % 60;
-                const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                let timeStr = "Live/VOD";
+                if (video.lengthSeconds) {
+                    const durationRaw = parseInt(video.lengthSeconds) || 0;
+                    const minutes = Math.floor(durationRaw / 60);
+                    const seconds = durationRaw % 60;
+                    timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                }
+
+                const viewsStr = video.viewCount ? `${video.viewCount.toLocaleString()} views` : 'Unknown views';
 
                 card.innerHTML = `
                     <a href="https://www.youtube.com/watch?v=${video.videoId}" target="_blank" class="relative block overflow-hidden aspect-video bg-black">
@@ -503,7 +564,7 @@
                         <h3 class="text-sm font-semibold text-white line-clamp-2 mb-1 group-hover:text-primary transition" title="${video.title}">${video.title}</h3>
                         <p class="text-xs text-slate-400 mb-2">${video.author}</p>
                         <div class="mt-auto flex justify-between items-center text-[10px] text-slate-500 font-mono">
-                            <span>${(video.viewCount || 0).toLocaleString()} views</span>
+                            <span>${viewsStr}</span>
                             <span>${video.publishedText || 'Unknown date'}</span>
                         </div>
                         <div class="mt-2 pt-2 border-t border-slate-700/50">
@@ -515,6 +576,7 @@
                 `;
                 resultsContainer.appendChild(card);
             });
+            
             lucide.createIcons();
         }
 
