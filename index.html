@@ -426,7 +426,7 @@
                     console.log(`Trying ${node.url}...`);
                     
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout per node
+                    const timeoutId = setTimeout(() => controller.abort(), 8000); // Increased timeout to 8s
 
                     let data = [];
                     let url = '';
@@ -437,23 +437,47 @@
                         url = `${node.url}/api/v1/search?q=${encodeURIComponent(query)}&type=video`;
                     }
 
-                    let response;
-                    try {
-                        // Standard fetch
-                        response = await fetch(url, { signal: controller.signal });
-                    } catch (netErr) {
-                        // If direct fetch fails (usually CORS or local network issue), try securely via a proxy
-                        console.warn(`Direct fetch failed, attempting proxy fallback for ${hostname}...`);
-                        loadingText.innerText = `Proxying request to ${hostname}...`;
-                        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url);
-                        response = await fetch(proxyUrl, { signal: controller.signal });
+                    // Multi-layer Fetch Strategy
+                    const proxies = [
+                        { name: 'Direct', fn: (u) => u },
+                        { name: 'AllOrigins', fn: (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}` },
+                        { name: 'CorsProxy', fn: (u) => `https://corsproxy.io/?${encodeURIComponent(u)}` }
+                    ];
+
+                    let json = null;
+                    let lastFetchError = null;
+
+                    for (const proxy of proxies) {
+                        try {
+                            if (proxy.name !== 'Direct') {
+                                console.warn(`Direct fetch failed, attempting ${proxy.name} fallback for ${hostname}...`);
+                                loadingText.innerText = `Proxying via ${proxy.name}...`;
+                            }
+                            
+                            const targetUrl = proxy.fn(url);
+                            const response = await fetch(targetUrl, { signal: controller.signal });
+                            
+                            if (!response.ok) {
+                                throw new Error(`HTTP ${response.status}`);
+                            }
+                            
+                            const text = await response.text();
+                            
+                            // The critical fix: If the response is HTML (Cloudflare block), reject it cleanly!
+                            if (text.trim().startsWith('<')) {
+                                throw new Error("Received HTML instead of JSON (Likely Cloudflare block)");
+                            }
+                            
+                            json = JSON.parse(text);
+                            break; // Successfully got JSON, exit proxy loop!
+                        } catch (e) {
+                            lastFetchError = e;
+                        }
                     }
 
                     clearTimeout(timeoutId);
                     
-                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                    
-                    const json = await response.json();
+                    if (!json) throw new Error(lastFetchError ? lastFetchError.message : "All attempts failed");
 
                     // Parse depending on instance type and validate structure
                     if (node.type === 'piped') {
