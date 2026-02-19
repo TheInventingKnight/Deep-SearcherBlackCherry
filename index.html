@@ -63,8 +63,8 @@
                 <h1 class="text-xl font-bold text-white tracking-tight">DeepTube <span class="text-primary">Archiver</span></h1>
             </div>
             <div class="flex items-center gap-4 text-sm font-mono text-slate-400">
-                <span class="hidden sm:inline-block flex items-center gap-1"><i data-lucide="terminal" class="w-4 h-4"></i> yt-dlp Ready</span>
-                <span class="hidden sm:inline-block flex items-center gap-1"><i data-lucide="server" class="w-4 h-4"></i> API: <span id="api-status" class="text-green-500">Idle</span></span>
+                <span class="hidden sm:flex items-center gap-1"><i data-lucide="terminal" class="w-4 h-4"></i> yt-dlp Ready</span>
+                <span class="hidden sm:flex items-center gap-1"><i data-lucide="server" class="w-4 h-4"></i> API: <span id="api-status" class="text-green-500">Idle</span></span>
             </div>
         </div>
     </header>
@@ -103,7 +103,7 @@
                             <button type="button" onclick="setDates('2005-01-01', '2009-12-31')" class="text-xs bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded border border-slate-700 transition">2005-2009</button>
                             <button type="button" onclick="setDates('2010-01-01', '2015-12-31')" class="text-xs bg-slate-800 hover:bg-slate-700 text-primary border border-primary/30 px-2 py-1 rounded transition">2010-2015</button>
                             <button type="button" onclick="setDates('2016-01-01', '2020-12-31')" class="text-xs bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded border border-slate-700 transition">2016-2020</button>
-                            <button type="button" onclick="setDates('', '')" class="text-xs bg-slate-800 hover:bg-red-900/50 px-2 py-1 rounded border border-slate-700 transition">Clear Dates</button>
+                            <button type="button" onclick="setDates('', '')" class="text-xs bg-slate-800 hover:bg-red-900/50 px-2 py-1 rounded border border-slate-700 transition">Clear</button>
                         </div>
                     </div>
 
@@ -209,7 +209,7 @@
                 <!-- Loading State (Hidden by default) -->
                 <div id="loading-state" class="hidden flex-col items-center justify-center py-20">
                     <span class="loader w-12 h-12 mb-4"></span>
-                    <p class="text-primary font-mono animate-pulse">Scraping archive via proxy node...</p>
+                    <p class="text-primary font-mono animate-pulse" id="loading-text">Initializing proxy nodes...</p>
                 </div>
             </div>
 
@@ -220,28 +220,44 @@
         // Initialize Lucide Icons
         lucide.createIcons();
 
-        // Constants and State
-        const API_NODES = [
+        // Extended and updated list of highly available public instances
+        const BASE_API_NODES = [
+            // Piped Instances
             { url: 'https://pipedapi.kavin.rocks', type: 'piped' },
-            { url: 'https://pipedapi.lunar.icu', type: 'piped' },
             { url: 'https://pipedapi.smnz.de', type: 'piped' },
             { url: 'https://api.piped.projectsegfau.lt', type: 'piped' },
-            { url: 'https://piped-api.garudalinux.org', type: 'piped' },
-            { url: 'https://invidious.nerdvpn.de', type: 'invidious' },
+            { url: 'https://piped-api.lunar.icu', type: 'piped' },
+            { url: 'https://pipedapi.tokhmi.xyz', type: 'piped' },
+            { url: 'https://pipedapi.syncpundit.io', type: 'piped' },
+            // Invidious Instances
+            { url: 'https://invidious.jing.rocks', type: 'invidious' },
+            { url: 'https://invidious.lunar.icu', type: 'invidious' },
             { url: 'https://inv.tux.pizza', type: 'invidious' },
-            { url: 'https://invidious.projectsegfau.lt', type: 'invidious' },
-            { url: 'https://vid.puffyan.us', type: 'invidious' }
+            { url: 'https://invidious.fdn.fr', type: 'invidious' },
+            { url: 'https://invidious.perennialte.ch', type: 'invidious' },
+            { url: 'https://invidious.privacydev.net', type: 'invidious' },
+            { url: 'https://inv.bp.projectsegfau.lt', type: 'invidious' }
         ];
-        let currentNodeIndex = 0;
 
         // UI Elements
         const form = document.getElementById('search-form');
         const resultsContainer = document.getElementById('results-container');
         const loadingState = document.getElementById('loading-state');
+        const loadingText = document.getElementById('loading-text');
         const ytdlpCode = document.getElementById('ytdlp-code');
         const ytDirectLink = document.getElementById('yt-direct-link');
         const ytUrlDisplay = document.getElementById('yt-url-display');
         const apiStatus = document.getElementById('api-status');
+
+        // Helper: Shuffle array to distribute load and avoid sequentially hitting dead nodes
+        function shuffleArray(array) {
+            let shuffled = [...array];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+        }
 
         // Helper: Set dates from buttons
         window.setDates = function(start, end) {
@@ -263,31 +279,51 @@
             document.getElementById(`content-${tabName}`).classList.add('block');
         };
 
-        // Helper: Copy to Clipboard
+        // Custom Toast Notification (Replacing default alert())
+        function showToast(message) {
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-4 right-4 bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-lg shadow-xl z-50 flex items-center gap-3 transform transition-all translate-y-0 opacity-100 font-sans text-sm';
+            toast.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5 text-green-500"></i> ${message}`;
+            document.body.appendChild(toast);
+            lucide.createIcons();
+            
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-4');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Helper: Copy to Clipboard safely
         window.copyToClipboard = function(elementId) {
             const el = document.getElementById(elementId);
-            const text = el.innerText;
-            copyAction(text);
+            copyAction(el.innerText);
         };
 
         window.copyToClipboardInput = function(elementId) {
             const el = document.getElementById(elementId);
-            const text = el.value;
-            copyAction(text);
+            copyAction(el.value);
         };
 
         function copyAction(text) {
             try {
-                // Fallback for iframe restrictions where navigator.clipboard might fail
-                const textArea = document.createElement("textarea");
-                textArea.value = text;
-                document.body.appendChild(textArea);
-                textArea.select();
-                document.execCommand("copy");
-                textArea.remove();
-                alert("Copied to clipboard!");
+                // Try modern clipboard API first
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(text).then(() => {
+                        showToast("Copied to clipboard!");
+                    });
+                } else {
+                    // Fallback using execCommand
+                    const textArea = document.createElement("textarea");
+                    textArea.value = text;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand("copy");
+                    textArea.remove();
+                    showToast("Copied to clipboard!");
+                }
             } catch (err) {
                 console.error('Failed to copy', err);
+                showToast("Failed to copy text.");
             }
         }
 
@@ -339,7 +375,6 @@
             cmd += `-o "%(upload_date)s - %(title)s [%(id)s].%(ext)s" `;
 
             // The actual search query to yt-dlp
-            // We use standard query logic inside ytsearch
             cmd += `"ytsearch${dlCount}:${fullQuery.replace(/"/g, '\\"')}"`;
 
             return cmd;
@@ -365,36 +400,64 @@
             fetchInAppResults(fullQuery);
         });
 
-        // Fetch from Public APIs
+        // Fetch from Public APIs with High Resiliency Fallbacks
         async function fetchInAppResults(query) {
             resultsContainer.innerHTML = '';
             resultsContainer.classList.add('hidden');
             loadingState.classList.remove('hidden');
             loadingState.classList.add('flex');
-            apiStatus.innerText = "Fetching...";
+            apiStatus.innerText = "Connecting...";
             apiStatus.className = "text-yellow-500";
 
             let success = false;
             let unifiedData = null;
             let attempts = 0;
+            
+            // Reshuffle nodes for every new request
+            let activeNodes = shuffleArray(BASE_API_NODES);
 
             // Try different instances if one fails
-            while (!success && attempts < API_NODES.length) {
-                const node = API_NODES[currentNodeIndex];
+            while (!success && attempts < activeNodes.length) {
+                const node = activeNodes[attempts];
+                const hostname = new URL(node.url).hostname;
+                
                 try {
+                    loadingText.innerText = `Connecting to ${hostname}...`;
                     console.log(`Trying ${node.url}...`);
                     
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+                    const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout per node
 
                     let data = [];
-                    
+                    let url = '';
+
                     if (node.type === 'piped') {
-                        const url = `${node.url}/search?q=${encodeURIComponent(query)}&filter=videos`;
-                        const response = await fetch(url, { signal: controller.signal });
-                        clearTimeout(timeoutId);
-                        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                        const json = await response.json();
+                        url = `${node.url}/search?q=${encodeURIComponent(query)}&filter=videos`;
+                    } else if (node.type === 'invidious') {
+                        url = `${node.url}/api/v1/search?q=${encodeURIComponent(query)}&type=video`;
+                    }
+
+                    let response;
+                    try {
+                        // Standard fetch
+                        response = await fetch(url, { signal: controller.signal });
+                    } catch (netErr) {
+                        // If direct fetch fails (usually CORS or local network issue), try securely via a proxy
+                        console.warn(`Direct fetch failed, attempting proxy fallback for ${hostname}...`);
+                        loadingText.innerText = `Proxying request to ${hostname}...`;
+                        const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url);
+                        response = await fetch(proxyUrl, { signal: controller.signal });
+                    }
+
+                    clearTimeout(timeoutId);
+                    
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    
+                    const json = await response.json();
+
+                    // Parse depending on instance type and validate structure
+                    if (node.type === 'piped') {
+                        if (!json.items) throw new Error("Malformed Piped data");
                         data = json.items.filter(i => i.type === 'stream').map(i => ({
                             videoId: i.url.replace('/watch?v=', ''),
                             title: i.title,
@@ -405,11 +468,7 @@
                             thumbUrl: i.thumbnail
                         }));
                     } else if (node.type === 'invidious') {
-                        const url = `${node.url}/api/v1/search?q=${encodeURIComponent(query)}&type=video`;
-                        const response = await fetch(url, { signal: controller.signal });
-                        clearTimeout(timeoutId);
-                        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                        const json = await response.json();
+                        if (!Array.isArray(json)) throw new Error("Malformed Invidious data");
                         data = json.filter(i => i.type === 'video').map(i => ({
                             videoId: i.videoId,
                             title: i.title,
@@ -423,12 +482,11 @@
 
                     unifiedData = data;
                     success = true;
-                    apiStatus.innerText = `Connected (${new URL(node.url).hostname})`;
+                    apiStatus.innerText = `Connected (${hostname})`;
                     apiStatus.className = "text-green-500";
 
                 } catch (err) {
-                    console.warn(`Failed on ${node.url}`, err);
-                    currentNodeIndex = (currentNodeIndex + 1) % API_NODES.length;
+                    console.warn(`Failed on ${hostname}:`, err.message);
                     attempts++;
                 }
             }
@@ -437,6 +495,7 @@
             loadingState.classList.remove('flex');
             resultsContainer.classList.remove('hidden');
 
+            // If ALL nodes and proxies fail
             if (!success || !unifiedData) {
                 apiStatus.innerText = "API Offline";
                 apiStatus.className = "text-red-500";
@@ -444,32 +503,34 @@
                     <div class="col-span-full flex flex-col items-center justify-center text-red-400 h-full py-10 bg-red-900/10 rounded-lg border border-red-900/50">
                         <i data-lucide="server-crash" class="w-12 h-12 mb-3 text-red-500"></i>
                         <h3 class="font-bold text-lg text-red-500">Public APIs Failed</h3>
-                        <p class="text-sm mt-2 text-center max-w-md">Anti-bot protections or instance downtime prevented in-app loading.</p>
-                        <p class="text-sm mt-4 text-center">Don't worry! Your deep search parameters are saved. Use the <strong>Direct YouTube Link</strong> tab or the <strong>yt-dlp</strong> command above to get your videos.</p>
+                        <p class="text-sm mt-2 text-center max-w-md">Anti-bot protections or CORS strictness prevented in-app loading from all fallback nodes.</p>
+                        <p class="text-sm mt-4 text-center">Don't worry! Your deep search parameters are correctly formatted. Use the <strong>Direct YouTube Link</strong> tab or the <strong>yt-dlp</strong> command above to get your videos.</p>
                     </div>
                 `;
                 lucide.createIcons();
                 return;
             }
 
+            // If search succeeds but returns nothing
             if (unifiedData.length === 0) {
                  resultsContainer.innerHTML = `
                     <div class="col-span-full flex flex-col items-center justify-center text-slate-400 h-full py-10">
                         <i data-lucide="ghost" class="w-12 h-12 mb-3"></i>
                         <p>No results found for this deep query.</p>
+                        <p class="text-xs mt-2 opacity-50">Try broadening the date range or removing exact phrases.</p>
                     </div>
                 `;
                 lucide.createIcons();
                 return;
             }
 
-            // Render Results
+            // Render Results safely
             unifiedData.forEach(video => {
                 const card = document.createElement('div');
                 card.className = 'bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden hover:border-primary/50 transition flex flex-col group';
                 
                 // Format duration
-                const durationRaw = video.lengthSeconds;
+                const durationRaw = parseInt(video.lengthSeconds) || 0;
                 const minutes = Math.floor(durationRaw / 60);
                 const seconds = durationRaw % 60;
                 const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
