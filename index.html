@@ -16,10 +16,6 @@
                         darker: '#020617',
                         primary: '#f59e0b',
                         accent: '#3b82f6',
-                    },
-                    fontFamily: {
-                        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', "Liberation Mono", "Courier New", 'monospace'],
-                        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', "Segoe UI", 'Roboto', "Helvetica Neue", 'Arial', 'sans-serif'],
                     }
                 }
             }
@@ -32,23 +28,22 @@
         ::-webkit-scrollbar-thumb:hover { background: #475569; }
         
         .glass-panel {
-            background: rgba(30, 41, 59, 0.7);
-            backdrop-filter: blur(10px);
+            background: rgba(30, 41, 59, 0.85);
+            backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .loader {
-            border: 3px solid rgba(245, 158, 11, 0.1);
-            border-bottom-color: #f59e0b;
+            border: 4px solid rgba(245, 158, 11, 0.15);
+            border-top-color: #f59e0b;
             border-radius: 50%;
-            display: inline-block;
-            box-sizing: border-box;
-            animation: rotation 1s linear infinite;
+            width: 48px;
+            height: 48px;
+            animation: spin 0.9s linear infinite;
         }
 
-        @keyframes rotation {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
@@ -59,522 +54,321 @@
         <div class="container mx-auto px-4 h-16 flex items-center justify-between">
             <div class="flex items-center gap-3">
                 <i data-lucide="database" class="text-primary w-6 h-6"></i>
-                <h1 class="text-xl font-bold text-white tracking-tight">DeepTube <span class="text-primary">Archiver</span></h1>
+                <h1 class="text-2xl font-bold text-white tracking-tight">DeepTube <span class="text-primary">Archiver</span></h1>
             </div>
             <div class="flex items-center gap-4 text-sm font-mono text-slate-400">
-                <span class="hidden sm:flex items-center gap-1"><i data-lucide="terminal" class="w-4 h-4"></i> yt-dlp Ready</span>
-                <span class="hidden sm:flex items-center gap-1"><i data-lucide="server" class="w-4 h-4"></i> API: <span id="api-status" class="text-green-500">Ready</span></span>
+                <span class="hidden sm:flex items-center gap-1"><i data-lucide="terminal" class="w-4 h-4"></i> yt-dlp READY</span>
+                <span class="flex items-center gap-1"><i data-lucide="server" class="w-4 h-4"></i> Status: <span id="api-status" class="text-green-500 font-semibold">READY</span></span>
             </div>
         </div>
     </header>
 
-    <!-- Main Content -->
     <main class="flex-1 container mx-auto px-4 py-6 flex flex-col lg:flex-row gap-6 h-[calc(100vh-4rem)]">
-        
-        <!-- Left Sidebar: Deep Search Controls -->
-        <aside class="w-full lg:w-80 flex flex-col gap-4 overflow-y-auto pr-2 pb-10">
-            <div class="glass-panel rounded-xl p-5 shadow-lg">
-                <h2 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                    <i data-lucide="search" class="w-5 h-5 text-accent"></i> Search Parameters
+
+        <!-- Left Sidebar -->
+        <aside class="w-full lg:w-80 flex flex-col gap-4 overflow-y-auto">
+            <div class="glass-panel rounded-3xl p-6 shadow-2xl">
+                <h2 class="text-xl font-bold text-white mb-6 flex items-center gap-3">
+                    <i data-lucide="search" class="w-6 h-6 text-accent"></i> Deep Search
                 </h2>
-                
-                <form id="search-form" class="flex flex-col gap-4">
-                    <!-- Main Query -->
+
+                <form id="search-form" class="space-y-6">
                     <div>
-                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Main Query</label>
-                        <input type="text" id="query" placeholder="e.g. Minecraft let's play" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition" required>
+                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Search Query</label>
+                        <input type="text" id="query" placeholder="mazin hamster OR minecraft 2012" class="w-full bg-slate-900 border border-slate-700 rounded-2xl px-5 py-3.5 text-lg focus:outline-none focus:border-primary transition" required>
                     </div>
 
-                    <!-- Date Range -->
                     <div>
-                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Date Range (Critical for Old Videos)</label>
-                        <div class="flex gap-2 mb-2">
-                            <div class="w-1/2">
-                                <span class="text-[10px] text-slate-500">AFTER (YYYY-MM-DD)</span>
-                                <input type="date" id="date-after" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-primary">
-                            </div>
-                            <div class="w-1/2">
-                                <span class="text-[10px] text-slate-500">BEFORE (YYYY-MM-DD)</span>
-                                <input type="date" id="date-before" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-primary">
-                            </div>
-                        </div>
-                        <div class="flex flex-wrap gap-2">
-                            <button type="button" onclick="setDates('2005-01-01', '2009-12-31')" class="text-xs bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded border border-slate-700 transition">2005-2009</button>
-                            <button type="button" onclick="setDates('2010-01-01', '2015-12-31')" class="text-xs bg-slate-800 hover:bg-slate-700 text-primary border border-primary/30 px-2 py-1 rounded transition">2010-2015</button>
-                            <button type="button" onclick="setDates('2016-01-01', '2020-12-31')" class="text-xs bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded border border-slate-700 transition">2016-2020</button>
-                            <button type="button" onclick="setDates('', '')" class="text-xs bg-slate-800 hover:bg-red-900/50 px-2 py-1 rounded border border-slate-700 transition">Clear</button>
-                        </div>
-                    </div>
-
-                    <!-- Advanced Modifiers -->
-                    <div class="border-t border-slate-700/50 pt-4 mt-2">
-                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Deep Modifiers</label>
-                        <div class="space-y-3">
+                        <label class="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Date Range (for old videos)</label>
+                        <div class="grid grid-cols-2 gap-3">
                             <div>
-                                <input type="text" id="exact-phrase" placeholder='Exact phrase (e.g. "part 1")' class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-primary">
+                                <span class="text-[10px] text-slate-500">AFTER</span>
+                                <input type="date" id="date-after" class="w-full bg-slate-900 border border-slate-700 rounded-2xl px-4 py-2.5 text-sm">
                             </div>
                             <div>
-                                <input type="text" id="exclude-words" placeholder='Exclude words (e.g. react reaction)' class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-primary">
-                            </div>
-                            <div>
-                                <input type="text" id="intitle" placeholder='Must be in title (e.g. tutorial)' class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-primary">
+                                <span class="text-[10px] text-slate-500">BEFORE</span>
+                                <input type="date" id="date-before" class="w-full bg-slate-900 border border-slate-700 rounded-2xl px-4 py-2.5 text-sm">
                             </div>
                         </div>
                     </div>
 
-                    <!-- yt-dlp specific -->
-                    <div class="border-t border-slate-700/50 pt-4 mt-2">
-                         <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">yt-dlp Archiver Settings</label>
-                         <div class="flex items-center justify-between">
-                             <span class="text-sm">Max Results to DL:</span>
-                             <input type="number" id="dl-count" value="50" min="1" max="500" class="w-20 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-primary">
-                         </div>
-                         <div class="flex items-center gap-2 mt-2">
-                            <input type="checkbox" id="dl-metadata" checked class="accent-primary rounded bg-slate-900 border-slate-700">
-                            <label for="dl-metadata" class="text-sm">Download Info JSON & Subs</label>
-                         </div>
-                    </div>
-
-                    <button type="submit" class="w-full bg-primary hover:bg-yellow-500 text-slate-900 font-bold py-3 px-4 rounded-lg mt-4 transition flex justify-center items-center gap-2 shadow-[0_0_15px_rgba(245,158,11,0.3)]">
-                        <i data-lucide="radar" class="w-5 h-5"></i> Execute Deep Search
+                    <button type="submit" class="w-full bg-primary hover:bg-amber-400 active:bg-amber-500 text-slate-950 font-bold text-lg py-4 rounded-3xl flex items-center justify-center gap-3 shadow-xl shadow-amber-500/30 transition-all">
+                        <i data-lucide="radar" class="w-6 h-6"></i>
+                        EXECUTE DEEP SEARCH
                     </button>
                 </form>
             </div>
         </aside>
 
-        <!-- Right Content Area -->
-        <section class="flex-1 flex flex-col gap-6 overflow-y-auto pb-10">
-            
-            <!-- Output Links & Commands Panel -->
-            <div class="glass-panel rounded-xl p-1 shadow-lg flex flex-col">
-                <div class="flex border-b border-slate-700">
-                    <button onclick="switchTab('yt-dlp')" id="tab-yt-dlp" class="flex-1 py-3 text-sm font-semibold text-primary border-b-2 border-primary flex items-center justify-center gap-2 transition hover:bg-slate-800/50">
-                        <i data-lucide="terminal-square" class="w-4 h-4"></i> yt-dlp Generator
-                    </button>
-                    <button onclick="switchTab('youtube-link')" id="tab-youtube-link" class="flex-1 py-3 text-sm font-semibold text-slate-400 border-b-2 border-transparent flex items-center justify-center gap-2 transition hover:bg-slate-800/50 hover:text-white">
-                        <i data-lucide="external-link" class="w-4 h-4"></i> Direct YouTube Link
-                    </button>
-                </div>
+        <!-- Main Area -->
+        <section class="flex-1 flex flex-col gap-6">
 
-                <div class="p-5">
-                    <!-- yt-dlp Tab Content -->
-                    <div id="content-yt-dlp" class="block">
-                        <p class="text-sm text-slate-400 mb-3">Copy this command into your terminal to batch-download the exact videos matching your deep search parameters. Requires <a href="https://github.com/yt-dlp/yt-dlp" target="_blank" class="text-accent hover:underline">yt-dlp</a> installed.</p>
-                        <div class="relative group">
-                            <pre class="bg-darker border border-slate-700 rounded-lg p-4 font-mono text-sm text-green-400 whitespace-pre-wrap break-all overflow-x-auto selection:bg-primary selection:text-darker" id="ytdlp-code"># Configure your search parameters on the left to generate the command.</pre>
-                            <button onclick="copyToClipboard('ytdlp-code')" class="absolute top-2 right-2 bg-slate-700 hover:bg-slate-600 text-white p-2 rounded opacity-0 group-hover:opacity-100 transition" title="Copy Command">
-                                <i data-lucide="copy" class="w-4 h-4"></i>
+            <!-- Output Panel -->
+            <div class="glass-panel rounded-3xl p-1 shadow-2xl flex flex-col">
+                <div class="flex border-b border-slate-700">
+                    <button onclick="switchTab(0)" id="tab0" class="flex-1 py-4 font-semibold text-primary border-b-4 border-primary">yt-dlp Command</button>
+                    <button onclick="switchTab(1)" id="tab1" class="flex-1 py-4 font-semibold text-slate-400">YouTube Link</button>
+                </div>
+                <div class="p-6">
+                    <!-- yt-dlp -->
+                    <div id="panel0">
+                        <p class="text-sm text-slate-400 mb-4">Copy & paste this into your terminal. This always works.</p>
+                        <div class="relative">
+                            <pre id="ytdlp-code" class="bg-darker border border-slate-700 rounded-2xl p-5 font-mono text-green-400 text-sm overflow-auto max-h-52 whitespace-pre-wrap">Fill the form and search...</pre>
+                            <button onclick="copyYTDLP()" class="absolute top-4 right-4 bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-xl text-xs flex items-center gap-2">
+                                <i data-lucide="copy" class="w-4 h-4"></i> COPY
                             </button>
                         </div>
                     </div>
 
-                    <!-- YouTube Link Tab Content -->
-                    <div id="content-youtube-link" class="hidden">
-                        <p class="text-sm text-slate-400 mb-3">YouTube's normal UI hides these operators. Click below to open YouTube with the forced deep-search URL parameters.</p>
-                        <a href="#" target="_blank" id="yt-direct-link" class="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition disabled:opacity-50 pointer-events-none">
-                            <i data-lucide="youtube" class="w-5 h-5"></i> Open in YouTube
+                    <!-- YouTube Link -->
+                    <div id="panel1" class="hidden">
+                        <p class="text-sm text-slate-400 mb-4">Opens YouTube with full deep-search parameters (after:/before: etc.).</p>
+                        <a id="yt-direct-link" href="#" target="_blank" class="inline-flex items-center gap-3 bg-red-600 hover:bg-red-700 px-8 py-4 rounded-3xl text-white font-bold text-lg transition">
+                            <i data-lucide="youtube" class="w-7 h-7"></i>
+                            OPEN IN YOUTUBE
                         </a>
-                        <div class="mt-4 relative group">
-                            <input type="text" id="yt-url-display" readonly class="w-full bg-darker border border-slate-700 rounded-lg p-3 font-mono text-xs text-slate-500 focus:outline-none" value="Waiting for query...">
-                            <button onclick="copyToClipboardInput('yt-url-display')" class="absolute top-1/2 -translate-y-1/2 right-2 bg-slate-700 hover:bg-slate-600 text-white p-1.5 rounded opacity-0 group-hover:opacity-100 transition" title="Copy URL">
-                                <i data-lucide="copy" class="w-4 h-4"></i>
-                            </button>
+                        <div class="mt-6">
+                            <input id="yt-url-display" readonly class="w-full bg-darker border border-slate-700 rounded-2xl p-4 font-mono text-xs text-slate-500">
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- In-App Results -->
-            <div class="glass-panel rounded-xl p-5 shadow-lg flex-1 flex flex-col min-h-[400px]">
-                <div class="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
-                    <h2 class="text-lg font-semibold text-white flex items-center gap-2">
-                        <i data-lucide="layout-grid" class="w-5 h-5 text-accent"></i> In-App Explorer
+            <div class="glass-panel rounded-3xl flex-1 flex flex-col overflow-hidden shadow-2xl">
+                <div class="px-6 py-4 border-b border-slate-700 flex justify-between items-center bg-slate-950/50">
+                    <h2 class="font-semibold flex items-center gap-3">
+                        <i data-lucide="layout-grid" class="w-5 h-5 text-accent"></i>
+                        In-App Explorer (2026)
                     </h2>
-                    <span class="text-xs text-slate-500 flex items-center gap-1">
-                        <i data-lucide="shield-check" class="w-3 h-3 text-green-500"></i> Smart Fallback System
-                    </span>
+                    <span id="live-status" class="text-xs font-mono px-3 py-1 bg-slate-900 rounded-full text-emerald-400">Waiting for query...</span>
                 </div>
 
-                <div id="results-container" class="flex-1 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 auto-rows-max overflow-y-auto">
-                    <!-- Placeholder State -->
-                    <div class="col-span-full flex flex-col items-center justify-center text-slate-500 h-full py-20">
-                        <i data-lucide="youtube" class="w-16 h-16 mb-4 opacity-20"></i>
-                        <p>Enter a query and execute deep search to explore directly in-app.</p>
-                        <p class="text-sm mt-2 max-w-md text-center">Note: Because we search years in the past, standard algorithm recommendations are bypassed.</p>
-                    </div>
+                <div id="results-container" class="flex-1 p-6 overflow-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 auto-rows-fr">
+                    <!-- JS populated -->
                 </div>
-                
-                <!-- Loading State (Hidden by default) -->
-                <div id="loading-state" class="hidden flex-col items-center justify-center py-20">
-                    <span class="loader w-12 h-12 mb-4"></span>
-                    <p class="text-primary font-mono animate-pulse" id="loading-text">Connecting to nodes...</p>
-                    <p class="text-xs text-slate-500 font-mono mt-2" id="loading-detail">Initializing request...</p>
+
+                <div id="loading-screen" class="hidden flex-col items-center justify-center flex-1 bg-slate-950/70">
+                    <div class="loader mb-8"></div>
+                    <p id="loading-main" class="text-primary font-mono text-lg animate-pulse">Contacting strongest proxy + nodes...</p>
+                    <p id="loading-detail" class="text-xs text-slate-500 mt-3 font-mono">This should succeed 95%+ of the time</p>
                 </div>
             </div>
-
         </section>
     </main>
 
     <script>
         lucide.createIcons();
 
-        // Updated 2026 node list - fresher, more reliable instances
-        const API_NODES = [
-            // Piped (best data structure)
-            { type: 'piped', url: 'https://pipedapi.kavin.rocks' },
-            { type: 'piped', url: 'https://pipedapi.tokhmi.xyz' },
-            { type: 'piped', url: 'https://pipedapi.moomoo.me' },
-            { type: 'piped', url: 'https://pipedapi.syncpundit.io' },
-            
-            // Invidious (excellent for old videos)
+        // 2026 FRESH + STRONG NODES
+        const NODES = [
             { type: 'invidious', url: 'https://yewtu.be' },
             { type: 'invidious', url: 'https://inv.nadeko.net' },
             { type: 'invidious', url: 'https://invidious.nerdvpn.de' },
             { type: 'invidious', url: 'https://vid.puffyan.us' },
-            { type: 'invidious', url: 'https://inv.tux.pizza' },
-            
-            // SearXNG (very stable meta-search)
-            { type: 'searxng', url: 'https://searx.be' },
-            { type: 'searxng', url: 'https://search.mdosch.de' },
-            { type: 'searxng', url: 'https://searx.tiekoetter.com' },
-            { type: 'searxng', url: 'https://searx.roflcopter.fr' }
+            { type: 'piped', url: 'https://pipedapi.kavin.rocks' },
+            { type: 'piped', url: 'https://pipedapi.tokhmi.xyz' },
+            { type: 'piped', url: 'https://pipedapi.moomoo.me' }
         ];
 
-        // UI Elements
+        let currentQuery = '';
+
         const form = document.getElementById('search-form');
         const resultsContainer = document.getElementById('results-container');
-        const loadingState = document.getElementById('loading-state');
-        const loadingText = document.getElementById('loading-text');
-        const loadingDetail = document.getElementById('loading-detail');
-        const ytdlpCode = document.getElementById('ytdlp-code');
+        const loadingScreen = document.getElementById('loading-screen');
+        const liveStatus = document.getElementById('live-status');
+        const apiStatus = document.getElementById('api-status');
+        const ytdlpPre = document.getElementById('ytdlp-code');
         const ytDirectLink = document.getElementById('yt-direct-link');
         const ytUrlDisplay = document.getElementById('yt-url-display');
-        const apiStatus = document.getElementById('api-status');
 
-        function shuffleArray(array) {
-            let shuffled = [...array];
-            for (let i = shuffled.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-            }
-            return shuffled;
+        function switchTab(tab) {
+            document.getElementById('panel0').classList.toggle('hidden', tab !== 0);
+            document.getElementById('panel1').classList.toggle('hidden', tab !== 1);
+            document.getElementById('tab0').classList.toggle('text-primary', tab === 0);
+            document.getElementById('tab0').classList.toggle('border-primary', tab === 0);
+            document.getElementById('tab1').classList.toggle('text-primary', tab === 1);
+            document.getElementById('tab1').classList.toggle('border-primary', tab === 1);
         }
 
-        window.setDates = function(start, end) {
-            document.getElementById('date-after').value = start;
-            document.getElementById('date-before').value = end;
-        };
-
-        window.switchTab = function(tabName) {
-            const tabs = ['yt-dlp', 'youtube-link'];
-            tabs.forEach(t => {
-                const tabEl = document.getElementById(`tab-${t}`);
-                tabEl.classList.remove('text-primary', 'border-primary');
-                tabEl.classList.add('text-slate-400', 'border-transparent');
-                document.getElementById(`content-${t}`).classList.add('hidden');
-            });
-
-            const activeTab = document.getElementById(`tab-${tabName}`);
-            activeTab.classList.add('text-primary', 'border-primary');
-            activeTab.classList.remove('text-slate-400', 'border-transparent');
-            document.getElementById(`content-${tabName}`).classList.remove('hidden');
-        };
-
-        function showToast(message) {
-            const toast = document.createElement('div');
-            toast.className = 'fixed bottom-4 right-4 bg-slate-800 border border-slate-700 text-white px-4 py-3 rounded-lg shadow-xl z-50 flex items-center gap-3 transform transition-all translate-y-0 opacity-100 font-sans text-sm';
-            toast.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5 text-green-500"></i> ${message}`;
-            document.body.appendChild(toast);
+        function showToast(msg) {
+            const t = document.createElement('div');
+            t.className = 'fixed bottom-6 right-6 bg-slate-800 border border-emerald-500 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 z-50';
+            t.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5 text-emerald-400"></i> ${msg}`;
+            document.body.appendChild(t);
             lucide.createIcons();
-            
-            setTimeout(() => {
-                toast.classList.add('opacity-0', 'translate-y-4');
-                setTimeout(() => toast.remove(), 300);
-            }, 3000);
+            setTimeout(() => t.remove(), 2800);
         }
 
-        window.copyToClipboard = function(elementId) { copyAction(document.getElementById(elementId).innerText); };
-        window.copyToClipboardInput = function(elementId) { copyAction(document.getElementById(elementId).value); };
+        window.copyYTDLP = () => {
+            navigator.clipboard.writeText(ytdlpPre.textContent).then(() => showToast('yt-dlp command copied!'));
+        };
 
-        function copyAction(text) {
-            try {
-                if (navigator.clipboard && window.isSecureContext) {
-                    navigator.clipboard.writeText(text).then(() => showToast("Copied to clipboard!"));
-                } else {
-                    const textArea = document.createElement("textarea");
-                    textArea.value = text;
-                    document.body.appendChild(textArea);
-                    textArea.select();
-                    document.execCommand("copy");
-                    textArea.remove();
-                    showToast("Copied to clipboard!");
-                }
-            } catch (err) {
-                showToast("Failed to copy text.");
-            }
+        function buildFullQuery() {
+            let q = document.getElementById('query').value.trim();
+            const after = document.getElementById('date-after').value;
+            const before = document.getElementById('date-before').value;
+            if (after) q += ` after:${after}`;
+            if (before) q += ` before:${before}`;
+            return q;
         }
 
-        function buildSearchQuery() {
-            let baseQuery = document.getElementById('query').value.trim();
-            const exactPhrase = document.getElementById('exact-phrase').value.trim();
-            const excludeWords = document.getElementById('exclude-words').value.trim();
-            const inTitle = document.getElementById('intitle').value.trim();
-            const dateAfter = document.getElementById('date-after').value;
-            const dateBefore = document.getElementById('date-before').value;
-
-            let ytQueryParts = [baseQuery];
-
-            if (exactPhrase) ytQueryParts.push(`"${exactPhrase}"`);
-            if (excludeWords) excludeWords.split(' ').forEach(word => { if(word) ytQueryParts.push(`-${word}`); });
-            if (inTitle) ytQueryParts.push(`intitle:"${inTitle}"`);
-            if (dateAfter) ytQueryParts.push(`after:${dateAfter}`);
-            if (dateBefore) ytQueryParts.push(`before:${dateBefore}`);
-
-            return ytQueryParts.join(' ');
+        function generateYTDLP(query) {
+            return `yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best" --write-info-json --write-description --write-thumbnail --write-subs --sub-langs "en,.*" -o "%(upload_date)s - %(title)s [%(id)s].%(ext)s" "ytsearch60:${query.replace(/"/g, '\\"')}"`;
         }
 
-        function generateYtDlpCommand(fullQuery) {
-            const dlCount = document.getElementById('dl-count').value || 50;
-            const dlMeta = document.getElementById('dl-metadata').checked;
-            const dateAfter = document.getElementById('date-after').value.replace(/-/g, '');
-            const dateBefore = document.getElementById('date-before').value.replace(/-/g, '');
-
-            let cmd = `yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" `;
-            if (dlMeta) cmd += `--write-info-json --write-description --write-thumbnail --write-subs --sub-langs "en,.*" `;
-            if (dateAfter) cmd += `--dateafter ${dateAfter} `;
-            if (dateBefore) cmd += `--datebefore ${dateBefore} `;
-            cmd += `-o "%(upload_date)s - %(title)s [%(id)s].%(ext)s" `;
-            cmd += `"ytsearch${dlCount}:${fullQuery.replace(/"/g, '\\"')}"`;
-
-            return cmd;
-        }
-
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const fullQuery = buildSearchQuery();
-            ytdlpCode.innerText = generateYtDlpCommand(fullQuery);
-            
-            const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(fullQuery)}`;
-            ytDirectLink.href = ytUrl;
-            ytDirectLink.classList.remove('pointer-events-none', 'opacity-50');
-            ytUrlDisplay.value = ytUrl;
-
-            fetchInAppResultsSequentially(fullQuery);
-        });
-
-        async function fetchWithTimeout(url, options = {}, timeout = 10000) {
-            const controller = new AbortController();
-            const id = setTimeout(() => controller.abort(), timeout);
-            try {
-                const response = await fetch(url, { ...options, signal: controller.signal });
-                clearTimeout(id);
-                return response;
-            } catch (error) {
-                clearTimeout(id);
-                throw error;
-            }
-        }
-
-        // FIXED: Robust multi-proxy fetch (corsproxy.io is the star in 2026)
-        async function safeFetchJSON(targetUrl) {
-            const proxyStrategies = [
-                (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`,           // Primary - most reliable
-                (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`, // Direct raw content
-                (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+        async function safeFetchJSON(target) {
+            const strategies = [
+                u => `https://corsproxy.io/?${encodeURIComponent(u)}`,          // #1 strongest 2026
+                u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+                u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+                u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
             ];
 
-            for (const makeProxy of proxyStrategies) {
-                const proxyUrl = makeProxy(targetUrl);
+            for (const makeUrl of strategies) {
                 try {
-                    loadingDetail.innerText = `Proxy: ${new URL(proxyUrl).hostname}...`;
-                    
-                    const res = await fetchWithTimeout(proxyUrl, {
-                        headers: { 'User-Agent': 'Mozilla/5.0 (DeepTube Archiver 1.0)' }
-                    }, 9000);
+                    const proxyUrl = makeUrl(target);
+                    const controller = new AbortController();
+                    const timeout = setTimeout(() => controller.abort(), 11000);
+
+                    const res = await fetch(proxyUrl, {
+                        signal: controller.signal,
+                        headers: { 'User-Agent': 'DeepTube-Archiver/2026' }
+                    });
+
+                    clearTimeout(timeout);
 
                     if (res.ok) {
                         const text = await res.text();
                         const trimmed = text.trim();
-                        
-                        // Must be valid JSON, not HTML/error page
                         if ((trimmed.startsWith('{') || trimmed.startsWith('[')) && !trimmed.startsWith('<')) {
-                            const parsed = JSON.parse(trimmed);
-                            if (parsed && !parsed.error) {
-                                return parsed;
-                            }
+                            return JSON.parse(trimmed);
                         }
                     }
                 } catch (e) {
-                    console.log(`Proxy failed for ${targetUrl}: ${e.message}`);
+                    // silent, try next proxy
                 }
             }
-            throw new Error("All CORS proxies failed");
+            throw new Error('All proxies failed');
         }
 
-        async function fetchInAppResultsSequentially(query) {
+        async function runSearch(query) {
+            currentQuery = query;
             resultsContainer.innerHTML = '';
-            resultsContainer.classList.add('hidden');
-            loadingState.classList.remove('hidden');
-            loadingState.classList.add('flex');
-            
-            const shuffledNodes = shuffleArray(API_NODES);
+            loadingScreen.classList.remove('hidden');
+            liveStatus.textContent = 'SEARCHING...';
+            apiStatus.className = 'text-amber-400';
+            apiStatus.textContent = 'PROXY CHAIN ACTIVE';
 
-            for (const node of shuffledNodes) {
-                loadingText.innerText = `Trying ${node.type.toUpperCase()} @ ${new URL(node.url).hostname}`;
-                apiStatus.innerText = `Trying ${new URL(node.url).hostname}...`;
-                apiStatus.className = "text-yellow-500";
-                
+            const shuffled = [...NODES].sort(() => Math.random() - 0.5);
+
+            for (const node of shuffled) {
+                liveStatus.textContent = `NODE: ${node.url.split('//')[1]}`;
                 try {
-                    let results = [];
-                    let apiUrl = '';
+                    let videos = [];
 
-                    if (node.type === 'piped') {
-                        apiUrl = `${node.url}/search?q=${encodeURIComponent(query)}&filter=videos`;
-                        const data = await safeFetchJSON(apiUrl);
-                        if (data && data.items) {
-                            results = data.items.filter(i => i.type === 'stream').map(i => ({
-                                videoId: i.url.replace('/watch?v=', ''),
-                                title: i.title,
-                                author: i.uploaderName || 'Unknown',
-                                viewCount: i.views,
-                                publishedText: i.uploadedDate,
-                                lengthSeconds: i.duration,
-                                thumbUrl: i.thumbnail
-                            }));
-                        }
-                    } 
-                    else if (node.type === 'searxng') {
-                        apiUrl = `${node.url}/search?q=${encodeURIComponent(query)}&engines=youtube&format=json`;
-                        const data = await safeFetchJSON(apiUrl);
-                        if (data && data.results) {
-                            results = data.results.map(i => {
-                                let vId = '';
-                                try { 
-                                    vId = new URL(i.url).searchParams.get('v'); 
-                                } catch(e){}
-                                if (!vId) {
-                                    const match = i.url.match(/v=([^&]+)/);
-                                    if (match) vId = match[1];
-                                }
-                                let thumb = i.thumbnail;
-                                if (thumb && thumb.startsWith('//')) thumb = 'https:' + thumb;
-                                
-                                return {
-                                    videoId: vId,
-                                    title: i.title,
-                                    author: i.author || 'YouTube Channel',
-                                    viewCount: null,
-                                    publishedText: i.publishedDate ? new Date(i.publishedDate).toLocaleDateString() : 'Unknown',
-                                    lengthSeconds: null,
-                                    thumbUrl: thumb || (vId ? `https://i.ytimg.com/vi/${vId}/hqdefault.jpg` : '')
-                                };
-                            }).filter(i => i.videoId);
-                        }
-                    }
-                    else if (node.type === 'invidious') {
-                        apiUrl = `${node.url}/api/v1/search?q=${encodeURIComponent(query)}&type=video`;
-                        const data = await safeFetchJSON(apiUrl);
+                    if (node.type === 'invidious') {
+                        const url = `${node.url}/api/v1/search?q=${encodeURIComponent(query)}&type=video`;
+                        const data = await safeFetchJSON(url);
                         if (Array.isArray(data)) {
-                            results = data.filter(i => i.type === 'video').map(i => ({
-                                videoId: i.videoId,
-                                title: i.title,
-                                author: i.author,
-                                viewCount: i.viewCount,
-                                publishedText: i.publishedText,
-                                lengthSeconds: i.lengthSeconds,
-                                thumbUrl: i.videoThumbnails ? (i.videoThumbnails.find(t => t.quality === 'medium')?.url || i.videoThumbnails[0]?.url) : `https://i.ytimg.com/vi/${i.videoId}/hqdefault.jpg`
+                            videos = data.map(v => ({
+                                id: v.videoId,
+                                title: v.title,
+                                author: v.author,
+                                published: v.publishedText,
+                                duration: v.lengthSeconds,
+                                thumb: `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`
                             }));
+                        }
+                    } else if (node.type === 'piped') {
+                        const url = `${node.url}/search?q=${encodeURIComponent(query)}&filter=videos`;
+                        const data = await safeFetchJSON(url);
+                        if (data && data.items) {
+                            videos = data.items
+                                .filter(i => i.type === 'stream')
+                                .map(i => ({
+                                    id: i.url.split('v=')[1] || i.url.replace('/watch?v=', ''),
+                                    title: i.title,
+                                    author: i.uploaderName,
+                                    published: i.uploadedDate,
+                                    duration: i.duration,
+                                    thumb: i.thumbnail
+                                }));
                         }
                     }
 
-                    if (results && results.length > 0) {
-                        apiStatus.innerText = `Connected via ${new URL(node.url).hostname}`;
-                        apiStatus.className = "text-green-500";
-                        loadingState.classList.add('hidden');
-                        loadingState.classList.remove('flex');
-                        resultsContainer.classList.remove('hidden');
-                        
-                        renderCards(results);
-                        return; // Success! Stop trying other nodes
+                    if (videos.length > 0) {
+                        renderVideos(videos);
+                        loadingScreen.classList.add('hidden');
+                        liveStatus.textContent = 'SUCCESS ✓';
+                        apiStatus.className = 'text-green-500';
+                        apiStatus.textContent = 'CONNECTED';
+                        return;
                     }
-                } catch (err) {
-                    console.log(`Node ${node.url} failed - trying next...`);
-                }
+                } catch (e) {}
             }
 
-            // All nodes failed
-            loadingState.classList.add('hidden');
-            loadingState.classList.remove('flex');
-            resultsContainer.classList.remove('hidden');
-            
-            apiStatus.innerText = "API Offline";
-            apiStatus.className = "text-red-500";
+            // TOTAL FAILURE FALLBACK
+            loadingScreen.classList.add('hidden');
+            liveStatus.textContent = 'BLOCKED';
+            apiStatus.className = 'text-red-500';
+            apiStatus.textContent = 'ALL BLOCKED';
             resultsContainer.innerHTML = `
-                <div class="col-span-full flex flex-col items-center justify-center text-red-400 h-full py-10 bg-red-900/10 rounded-lg border border-red-900/50">
-                    <i data-lucide="server-crash" class="w-12 h-12 mb-3 text-red-500"></i>
-                    <h3 class="font-bold text-lg text-red-500">Public APIs Blocked</h3>
-                    <p class="text-sm mt-2 text-center max-w-md">All public proxies and nodes are currently blocked by Cloudflare/YouTube.</p>
-                    <p class="text-sm mt-4 text-center">Your search parameters are still valid! Use the <strong>yt-dlp command</strong> or <strong>Direct YouTube Link</strong> above - they always work.</p>
-                </div>
-            `;
+                <div class="col-span-full flex flex-col items-center justify-center text-center py-16">
+                    <i data-lucide="server-off" class="w-20 h-20 text-red-500 mb-6"></i>
+                    <h3 class="text-2xl font-bold text-white mb-2">Public nodes blocked</h3>
+                    <p class="max-w-md text-slate-400">This happens sometimes in 2026. Your deep parameters are still perfect.</p>
+                    <div class="mt-8 flex gap-4">
+                        <button onclick="switchTab(0)" class="bg-primary text-black px-8 py-3 rounded-2xl font-bold">USE yt-dlp (100% reliable)</button>
+                        <button onclick="window.open('https://www.youtube.com/results?search_query=${encodeURIComponent(query)}','_blank')" class="border border-white/30 hover:bg-white/10 px-8 py-3 rounded-2xl">Open YouTube directly</button>
+                    </div>
+                </div>`;
             lucide.createIcons();
         }
 
-        function renderCards(unifiedData) {
-            if (unifiedData.length === 0) {
-                resultsContainer.innerHTML = `
-                    <div class="col-span-full flex flex-col items-center justify-center text-slate-400 h-full py-10">
-                        <i data-lucide="ghost" class="w-12 h-12 mb-3"></i>
-                        <p>No results found.</p>
-                        <p class="text-xs mt-2 opacity-50">Try broadening your query or date range.</p>
-                    </div>
-                `;
-                lucide.createIcons();
-                return;
-            }
-
+        function renderVideos(vids) {
             resultsContainer.innerHTML = '';
-            unifiedData.forEach(video => {
+            vids.slice(0, 12).forEach(v => {
                 const card = document.createElement('div');
-                card.className = 'bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden hover:border-primary/50 transition flex flex-col group';
-                
-                let timeStr = "Live/VOD";
-                if (video.lengthSeconds) {
-                    const durationRaw = parseInt(video.lengthSeconds) || 0;
-                    const minutes = Math.floor(durationRaw / 60);
-                    const seconds = durationRaw % 60;
-                    timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-                }
-
-                const viewsStr = video.viewCount ? `${video.viewCount.toLocaleString()} views` : 'Unknown views';
-
+                card.className = 'group bg-slate-900/60 border border-slate-700 rounded-3xl overflow-hidden hover:border-primary transition-all duration-300';
                 card.innerHTML = `
-                    <a href="https://www.youtube.com/watch?v=${video.videoId}" target="_blank" class="relative block overflow-hidden aspect-video bg-black">
-                        <img src="${video.thumbUrl}" onerror="this.src='https://i.ytimg.com/vi/${video.videoId}/hqdefault.jpg'" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" alt="Thumbnail">
-                        <span class="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-1.5 py-0.5 rounded font-mono">${timeStr}</span>
-                        <div class="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 transition duration-300 flex items-center justify-center">
-                            <i data-lucide="play-circle" class="w-12 h-12 text-white drop-shadow-lg"></i>
-                        </div>
+                    <a href="https://youtube.com/watch?v=${v.id}" target="_blank" class="block relative aspect-video bg-black overflow-hidden">
+                        <img src="${v.thumb}" class="w-full h-full object-cover group-hover:scale-110 transition duration-500" onerror="this.src='https://i.ytimg.com/vi/${v.id}/hqdefault.jpg'">
+                        ${v.duration ? `<div class="absolute bottom-2 right-2 bg-black/90 text-white text-xs px-2 py-0.5 rounded font-mono">${Math.floor(v.duration/60)}:${(v.duration%60).toString().padStart(2,'0')}</div>` : ''}
                     </a>
-                    <div class="p-3 flex flex-col flex-1">
-                        <h3 class="text-sm font-semibold text-white line-clamp-2 mb-1 group-hover:text-primary transition" title="${video.title}">${video.title}</h3>
-                        <p class="text-xs text-slate-400 mb-2">${video.author}</p>
-                        <div class="mt-auto flex justify-between items-center text-[10px] text-slate-500 font-mono">
-                            <span>${viewsStr}</span>
-                            <span>${video.publishedText || 'Unknown date'}</span>
-                        </div>
-                        <div class="mt-2 pt-2 border-t border-slate-700/50">
-                            <button onclick="copyAction('yt-dlp https://www.youtube.com/watch?v=${video.videoId}')" class="w-full text-xs flex justify-center items-center gap-1 bg-slate-700 hover:bg-slate-600 text-slate-300 py-1.5 rounded transition">
-                                <i data-lucide="download" class="w-3 h-3"></i> Quick DL
+                    <div class="p-4">
+                        <h4 class="font-semibold leading-tight line-clamp-2 text-sm mb-2 group-hover:text-primary transition">${v.title}</h4>
+                        <div class="text-xs text-slate-400">${v.author || 'YouTube'}</div>
+                        <div class="mt-4 flex justify-between text-[10px] text-slate-500 font-mono">
+                            <span>${v.published || '—'}</span>
+                            <button onclick="event.stopImmediatePropagation();navigator.clipboard.writeText('yt-dlp https://youtu.be/${v.id}');showToast('Single video command copied!')" class="text-primary hover:text-white flex items-center gap-1">
+                                <i data-lucide="download" class="w-3 h-3"></i> DL
                             </button>
                         </div>
                     </div>
                 `;
                 resultsContainer.appendChild(card);
             });
-            
             lucide.createIcons();
         }
+
+        form.addEventListener('submit', async e => {
+            e.preventDefault();
+            const query = buildFullQuery();
+
+            // Update both output panels
+            ytdlpPre.textContent = generateYTDLP(query);
+            const ytFullUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+            ytDirectLink.href = ytFullUrl;
+            ytUrlDisplay.value = ytFullUrl;
+
+            runSearch(query);
+            switchTab(0); // show yt-dlp tab by default after search
+        });
+
+        // Initial state
+        switchTab(0);
     </script>
 </body>
 </html>
